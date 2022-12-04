@@ -744,6 +744,7 @@ class Trainer(object):
 
         # forward and backward pass
         logging_outputs, sample_size, ooms = [], 0, 0
+        all_loss = []
         for i, sample in enumerate(samples):  # delayed update loop
             sample, is_dummy_batch = self._prepare_sample(sample)
 
@@ -782,7 +783,10 @@ class Trainer(object):
                     del loss
 
                 logging_outputs.append(logging_output)
+                all_loss.append(logging_output['all_loss'])
+                
                 sample_size += sample_size_i
+                import pdb; pdb.set_trace()
 
                 # emptying the CUDA cache after the first step can
                 # reduce the chance of OOM
@@ -1031,7 +1035,7 @@ class Trainer(object):
             )
 
         metrics.log_stop_time("train_wall")
-        return logging_output
+        return logging_output, all_loss
 
     @metrics.aggregate("valid")
     def valid_step(self, sample, raise_oom=False):

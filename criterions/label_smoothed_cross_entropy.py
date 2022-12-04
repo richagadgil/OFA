@@ -113,6 +113,7 @@ def label_smoothed_nll_loss(
 
     ntokens = loss.numel()
     nll_loss = nll_loss.sum()
+    all_loss = loss
     loss = loss.sum()
     if use_rdrop:
         true_batch_size = lprobs.size(0) // 2
@@ -124,7 +125,7 @@ def label_smoothed_nll_loss(
             q = q[:, constraint_range]
         loss += kl_loss(p, q) * reg_alpha
 
-    return loss, nll_loss, ntokens
+    return loss, nll_loss, ntokens, all_loss
 
 
 @register_criterion(
@@ -197,7 +198,7 @@ class AdjustLabelSmoothedCrossEntropyCriterion(FairseqCriterion):
             construct_rdrop_sample(sample)
 
         net_output = model(**sample["net_input"])
-        loss, nll_loss, ntokens = self.compute_loss(model, net_output, sample, update_num, reduce=reduce)
+        loss, nll_loss, ntokens, all_loss = self.compute_loss(model, net_output, sample, update_num, reduce=reduce)
         sample_size = (
             sample["target"].size(0) if self.sentence_avg else ntokens
         )
@@ -207,6 +208,7 @@ class AdjustLabelSmoothedCrossEntropyCriterion(FairseqCriterion):
             "ntokens": sample["ntokens"],
             "nsentences": sample["nsentences"],
             "sample_size": sample_size,
+            "all_loss": all_loss
         }
         if self.report_accuracy:
             n_correct, total = self.compute_accuracy(model, net_output, sample)
@@ -247,7 +249,7 @@ class AdjustLabelSmoothedCrossEntropyCriterion(FairseqCriterion):
             constraint_masks = constraint_masks[target != self.padding_idx]
         lprobs = lprobs[target != self.padding_idx]
         target = target[target != self.padding_idx]
-        loss, nll_loss, ntokens = label_smoothed_nll_loss(
+        loss, nll_loss, ntokens, all_loss = label_smoothed_nll_loss(
             lprobs,
             target,
             self.eps,
@@ -261,7 +263,7 @@ class AdjustLabelSmoothedCrossEntropyCriterion(FairseqCriterion):
             constraint_start=self.constraint_start,
             constraint_end=self.constraint_end
         )
-        return loss, nll_loss, ntokens
+        return loss, nll_loss, ntokens, all_loss
 
     def compute_accuracy(self, model, net_output, sample):
         lprobs, target = self.get_lprobs_and_target(model, net_output, sample)

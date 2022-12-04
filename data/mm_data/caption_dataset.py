@@ -72,6 +72,8 @@ def collate(samples, pad_idx, eos_idx):
             "prev_output_tokens": prev_output_tokens
         },
         "target": target,
+        "target_raw": np.array([s["target_raw"] for s in samples]),
+        "tgt_lengths": tgt_lengths
     }
 
     return batch
@@ -146,7 +148,8 @@ class CaptionDataset(OFADataset):
             "patch_image": patch_image,
             "patch_mask": patch_mask,
             "target": target_item,
-            "prev_output_tokens": prev_output_item
+            "prev_output_tokens": prev_output_item,
+            "target_raw": tgt_caption
         }
         return example
 

@@ -48,6 +48,14 @@ from utils import checkpoint_utils
 from trainer import Trainer
 
 
+from diffusers import StableDiffusionPipeline
+
+pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", revision="fp16", torch_dtype=torch.float16)  
+pipe = pipe.to("cuda")
+
+
+
+
 def main(cfg: FairseqConfig) -> None:
     if isinstance(cfg, argparse.Namespace):
         cfg = convert_namespace_to_omegaconf(cfg)
@@ -251,6 +259,10 @@ def should_stop_early(cfg: DictConfig, valid_loss: float) -> bool:
             return False
 
 
+def generate_novel_images(logging_output):
+  image = pipe("something in my hair").images[0]
+  print(logging_output)
+
 @metrics.aggregate("train")
 def train(
     cfg: DictConfig, trainer: Trainer, task: tasks.FairseqTask, epoch_itr
@@ -307,9 +319,12 @@ def train(
         with metrics.aggregate("train_inner"), torch.autograd.profiler.record_function(
             "train_step-%d" % i
         ):
-            log_output = trainer.train_step(samples)
+            log_output, all_loss = trainer.train_step(samples)
 
         if log_output is not None:  # not OOM, overflow, ...
+            
+            # generate_novel_images(all_loss, samples)
+            import pdb; pdb.set_trace()
             # log mid-epoch stats
             num_updates = trainer.get_num_updates()
             if num_updates % cfg.common.log_interval == 0:
