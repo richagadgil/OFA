@@ -259,9 +259,19 @@ def should_stop_early(cfg: DictConfig, valid_loss: float) -> bool:
             return False
 
 
-def generate_novel_images(logging_output):
-  image = pipe("something in my hair").images[0]
-  print(logging_output)
+def generate_novel_images(all_loss, samples):
+  for i in range(0, len(samples)):
+    all_loss_values = all_loss[i].cpu().detach().numpy()
+
+    tgt_lengths_values = np.cumsum(samples[i]['tgt_lengths'].numpy())[:-1]
+
+    print(all_loss_values, tgt_lengths_values, [np.mean(a) for a in np.split(all_loss_values, tgt_lengths_values)])
+
+    max_avg_loss_ind = np.argmax([np.mean(a) for a in np.split(all_loss_values, tgt_lengths_values)])
+    
+    image = pipe(samples[i]['target_raw'][max_avg_loss_ind]).images[0]
+    image.save(f"test.png")
+
 
 @metrics.aggregate("train")
 def train(
@@ -320,11 +330,14 @@ def train(
             "train_step-%d" % i
         ):
             log_output, all_loss = trainer.train_step(samples)
+            
 
         if log_output is not None:  # not OOM, overflow, ...
             
-            # generate_novel_images(all_loss, samples)
-            import pdb; pdb.set_trace()
+            generate_novel_images(all_loss, samples)
+            del all_loss
+
+            # import pdb; pdb.set_trace()
             # log mid-epoch stats
             num_updates = trainer.get_num_updates()
             if num_updates % cfg.common.log_interval == 0:

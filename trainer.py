@@ -786,7 +786,7 @@ class Trainer(object):
                 all_loss.append(logging_output['all_loss'])
                 
                 sample_size += sample_size_i
-                import pdb; pdb.set_trace()
+                # import pdb; pdb.set_trace()
 
                 # emptying the CUDA cache after the first step can
                 # reduce the chance of OOM
