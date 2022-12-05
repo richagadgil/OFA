@@ -267,9 +267,12 @@ def highest_loss_captions(all_loss, samples):
 
     tgt_lengths_values = np.cumsum(samples[i]['tgt_lengths'].numpy())[:-1]
 
-    max_avg_loss_ind = np.argmax([np.mean(a) for a in np.split(all_loss_values, tgt_lengths_values)])
+    split_loss = [np.mean(a) for a in np.split(all_loss_values, tgt_lengths_values)]
+
+    max_avg_loss_ind = np.argmax(split_loss)
+    max_avg_loss = np.max(split_loss)
     
-  return samples[i]['id'][max_avg_loss_ind], samples[i]['target_raw'][max_avg_loss_ind]
+  return samples[i]['id'][max_avg_loss_ind], samples[i]['target_raw'][max_avg_loss_ind], max_avg_loss
 
 def preprocess(s):
   s = str(s).replace("\n", "").replace("\t", "").strip()
@@ -277,16 +280,20 @@ def preprocess(s):
 
 def generate_images(to_generate):
   import random
+  import itertools
 
-  generated_images = 0
+  print(to_generate)
+  to_generate = {k: v for k, v in sorted(to_generate.items(), key=lambda item: -item[1][1])}
+  print(to_generate)
+  to_generate = dict(itertools.islice(to_generate.items(), 5)) 
 
-  keys = list(to_generate.keys()) 
-  print(len(keys))
-  random.shuffle(keys)
+  #keys = list(to_generate.keys()) 
+  #print(len(keys))
+  #random.shuffle(keys)
 
   record_file = open("/content/OFA/dataset/caption_data/captionv2_val_val.tsv", "a")
-  for uniq_id in keys:
-    caption = to_generate[uniq_id]
+  for uniq_id, v in to_generate.items():
+    caption = v[0]
     image = pipe(caption).images[0]
     image.save(f"/content/test.jpeg")
 
@@ -294,11 +301,8 @@ def generate_images(to_generate):
     with open(f"/content/test.jpeg", "rb") as img_file:
       s = base64.b64encode(img_file.read()).decode('utf-8')
     record_file.write(f"{preprocess(uniq_id)}\t{preprocess(uniq_id)}\t{preprocess(caption)}\t{preprocess(random_txt)}\t{s}\n")
-    generated_images += 1
 
-    if generated_images > 50:
-      record_file.close()
-      return
+
 
   
 
@@ -367,8 +371,8 @@ def train(
             
 
         if log_output is not None:  # not OOM, overflow, ...
-            uniq_id, caption = highest_loss_captions(all_loss, samples)
-            to_generate[uniq_id] = caption
+            uniq_id, caption, loss = highest_loss_captions(all_loss, samples)
+            to_generate[uniq_id] = (caption, loss)
             #del all_loss
 
             # import pdb; pdb.set_trace()
