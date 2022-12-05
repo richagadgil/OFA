@@ -49,6 +49,8 @@ from trainer import Trainer
 
 
 from diffusers import StableDiffusionPipeline
+import base64
+import random
 
 pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", revision="fp16", torch_dtype=torch.float16)  
 pipe = pipe.to("cuda")
@@ -259,18 +261,47 @@ def should_stop_early(cfg: DictConfig, valid_loss: float) -> bool:
             return False
 
 
-def generate_novel_images(all_loss, samples):
+def highest_loss_captions(all_loss, samples):
   for i in range(0, len(samples)):
     all_loss_values = all_loss[i].cpu().detach().numpy()
 
     tgt_lengths_values = np.cumsum(samples[i]['tgt_lengths'].numpy())[:-1]
 
-    print(all_loss_values, tgt_lengths_values, [np.mean(a) for a in np.split(all_loss_values, tgt_lengths_values)])
-
     max_avg_loss_ind = np.argmax([np.mean(a) for a in np.split(all_loss_values, tgt_lengths_values)])
     
-    image = pipe(samples[i]['target_raw'][max_avg_loss_ind]).images[0]
-    image.save(f"test.png")
+  return samples[i]['id'][max_avg_loss_ind], samples[i]['target_raw'][max_avg_loss_ind]
+
+def preprocess(s):
+  s = str(s).replace("\n", "").replace("\t", "").strip()
+  return s
+
+def generate_images(to_generate):
+  import random
+
+  generated_images = 0
+
+  keys = list(to_generate.keys()) 
+  print(len(keys))
+  random.shuffle(keys)
+
+  record_file = open("/content/OFA/dataset/caption_data/captionv2_val_val.tsv", "a")
+  for uniq_id in keys:
+    caption = to_generate[uniq_id]
+    image = pipe(caption).images[0]
+    image.save(f"/content/test.jpeg")
+
+    random_txt = 'random&&random'
+    with open(f"/content/test.jpeg", "rb") as img_file:
+      s = base64.b64encode(img_file.read()).decode('utf-8')
+    record_file.write(f"{preprocess(uniq_id)}\t{preprocess(uniq_id)}\t{preprocess(caption)}\t{preprocess(random_txt)}\t{s}\n")
+    generated_images += 1
+
+    if generated_images > 50:
+      record_file.close()
+      return
+
+  
+
 
 
 @metrics.aggregate("train")
@@ -325,6 +356,9 @@ def train(
     should_stop = False
     num_updates = trainer.get_num_updates()
     logger.info("Start iterating over samples")
+
+    to_generate = {}
+
     for i, samples in enumerate(progress):
         with metrics.aggregate("train_inner"), torch.autograd.profiler.record_function(
             "train_step-%d" % i
@@ -333,9 +367,9 @@ def train(
             
 
         if log_output is not None:  # not OOM, overflow, ...
-            
-            generate_novel_images(all_loss, samples)
-            del all_loss
+            uniq_id, caption = highest_loss_captions(all_loss, samples)
+            to_generate[uniq_id] = caption
+            #del all_loss
 
             # import pdb; pdb.set_trace()
             # log mid-epoch stats
@@ -363,6 +397,9 @@ def train(
 
     # reset epoch-level meters
     metrics.reset_meters("train")
+
+    generate_images(to_generate)
+
     return valid_losses, should_stop
 
 
